@@ -1,0 +1,1 @@
+python3 test_gSynCoeffs_baseline4b2.py 0 0 0 1.0 1.0 1

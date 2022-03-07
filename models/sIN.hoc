@@ -1,0 +1,624 @@
+/*--------------------------------------------------------------
+	TEMPLATE FILE FOR FAST-SPIKING CORTICAL INTERNEURON
+	---------------------------------------------------
+
+	One compartment model and currents derived from:
+
+   Pospischil, M., Toledo-Rodriguez, M., Monier, C., Piwkowska, Z., 
+   Bal, T., Fregnac, Y., Markram, H. and Destexhe, A.
+   Minimal Hodgkin-Huxley type models for different classes of
+   cortical and thalamic neurons.
+   Biological Cybernetics 99: 427-441, 2008.
+
+   - one compartment model
+   - passive
+   - HH: Traub
+
+   Alain Destexhe, CNRS, 2008
+
+   Tuomo Maki-Marttunen: Added functions from Hay's TTC.hoc, 2017
+
+--------------------------------------------------------------*/
+
+begintemplate sIN		// create a new template object
+//public soma
+public soma, dend, axon, all, somatic, dends // JFK
+
+public synlist, connect2target, APC, distributeSyn
+public initRand,insertMCcons
+public preconlist, rList, preTrainList
+public rd1
+public setnetworkparameters,initPreSynTrain,queuePreTrains,setpretrains
+public pA
+public getLongestBranch, locateSites
+
+objref all, somatic, dends, treenameList // JFK
+objref synlist
+objref preconlist, rList, preTrainList
+objref rd1
+objref this
+objref synvarVecList
+objref sref,fih
+
+//create soma[1]
+create soma[1], dend[2]//, axon[2]
+
+proc init() { local v_potassium, v_sodium
+
+  // JFK
+
+  all = new SectionList()
+  somatic = new SectionList()
+  dends = new SectionList()
+
+  // add sections in type-list 
+  soma[0] somatic.append()
+  dend[0] dends.append()
+  dend[1] dends.append()
+
+  // add sections in all-list
+  soma[0] all.append()
+  dend[0] all.append()
+  dend[1] all.append()
+
+
+  soma[0] {
+    pt3dadd(0, 0, -15, 30)
+    pt3dadd(0, 0, 15, 30)
+  }
+
+  dend[0] {
+    pt3dadd(0, 0, 15, 3)
+    pt3dadd(0, 0, 407, 3)
+  }
+
+
+  dend[1] {
+    pt3dadd(0,0,-15,3)
+    pt3dadd(0,0,-407,3)
+  }
+
+
+
+
+
+
+
+  // connect sections
+  connect dend[1](0), soma(0)
+  connect dend[0](0), soma(1)
+
+  //soma[0] connect axon[0](0), 1                                           
+  //axon[0] connect axon[1](0), 1
+
+
+
+  access soma
+
+  // KFJ
+
+ // JFK MECH
+ soma insert pas
+ dend insert pas
+ dend[1] insert pas
+
+ //axon insert pas
+ //axon[1] insert pas
+
+ soma {nseg = 1 Ra = 100 diam = 7.19591 L = 31.5639 cm = 1 V = -80 e_pas = -75.300257 }
+ dend[0] {nseg = 3 Ra = 100 diam = 10.28 L = 392 cm = 1 V = -80 e_pas = -75.300257 }
+ dend[1] {nseg = 3 Ra = 100 diam = 10.28 L = 392 cm = 1 V = -80 e_pas = -75.300257 }
+ //axon[0] {nseg = 1 Ra = 100 diam = 0.65 L = 30 cm = 1 V = -80 e_pas = -75.300257 }
+ //axon[1] {nseg = 1 Ra = 100 diam = 0.558814 L = 30 cm = 1 V = -80 e_pas = -75.300257 }
+
+
+soma(0.5) distance()
+
+ soma {
+    insert NaTs2_t
+    insert SKv3_1
+    insert Ca
+    insert SK_E2
+    insert Ca_LVAst
+    insert Nap_Et2
+    insert Im
+    insert K_Pst
+    insert K_Tst
+    insert CaDynamics_E2
+    ena = 50
+    ek = -85
+    
+
+    gK_Tstbar_K_Tst=0.008343
+    gamma_CaDynamics_E2=0.000893
+    gNap_Et2bar_Nap_Et2=0.000001
+    gCa_LVAstbar_Ca_LVAst=0.005574
+    gSK_E2bar_SK_E2=0.026900
+    gK_Pstbar_K_Pst=0.502333
+    gSKv3_1bar_SKv3_1=0.653374
+    decay_CaDynamics_E2=605.033222
+    e_pas=-76.498119
+    g_pas=0.000057
+    gImbar_Im=0.000784
+    gNaTs2_tbar_NaTs2_t=0.300054
+    gCabar_Ca=0.000792
+ }
+ forsec "dend" {
+    insert NaTs2_t
+    insert SKv3_1
+    insert Nap_Et2
+    insert Ih
+    insert Im
+    insert K_Pst
+    insert K_Tst
+
+
+    gSKv3_1bar_SKv3_1=0.005450
+    gNap_Et2bar_Nap_Et2=0.000001
+    gNaTs2_tbar_NaTs2_t=0.004119
+    e_pas=-60.065872
+    g_pas=0.000006
+    
+    for (x,0) {
+        gIhbar_Ih = (-0.869600 + 2.087000*exp((x*L-0.000000)*0.003000))*0.000051
+        gImbar_Im = (-0.869600 + 2.087000*exp((x*L--1000.)*-0.003000))*0.000371
+    }
+
+
+
+ }
+ /*apic {
+    insert NaTs2_t
+    insert SKv3_1
+    insert Nap_Et2
+    insert Ih
+    insert Im
+    insert K_Pst
+    insert K_Tst
+
+
+    gSKv3_1bar_SKv3_1=0.005450
+    gNap_Et2bar_Nap_Et2=0.000001
+    gNaTs2_tbar_NaTs2_t=0.004119
+    e_pas=-60.065872
+    g_pas=0.000006
+
+    for (x,0) {
+        gIhbar_Ih = (-0.869600 + 2.087000*exp((x*L-0.000000)*0.003000))*0.000051
+        //print x*L, gIhbar_Ih, L
+        gImbar_Im = (-0.869600 + 2.087000*exp((x*L--1000.)*-0.003000))*0.000371
+        //print x*L, gImbar_Im, L
+    }
+ }*/
+
+ /*forsec "axon" {
+    insert SKv3_1
+    insert Ca
+    insert SK_E2
+    insert CaDynamics_E2
+    insert Nap_Et2
+    insert Im
+    insert K_Pst
+    insert K_Tst
+    insert Ca_LVAst
+    insert NaTa_t
+    ena = 50
+    ek = -85
+
+    gNaTa_tbar_NaTa_t=3.418459
+    gK_Tstbar_K_Tst=0.026009
+    gamma_CaDynamics_E2=0.003923
+    gNap_Et2bar_Nap_Et2=0.000001
+    gCa_LVAstbar_Ca_LVAst=0.002256
+    gSK_E2bar_SK_E2=0.000009
+    gK_Pstbar_K_Pst=0.025854
+    gSKv3_1bar_SKv3_1=0.196957
+    decay_CaDynamics_E2=20.715642
+    e_pas=-60.250899
+    g_pas=0.000002
+    gImbar_Im=0.000599
+    gCabar_Ca=0.000138
+ }*/
+
+  // KFJ MECH
+
+  // JFK
+  geom_nseg()
+  area(0.5)
+  distance()
+  access soma  
+
+  synlist = new List()
+  preconlist = new List()
+  preTrainList = new List()
+  synvarVecList = new List()
+
+  pA = 0.5
+  // KFJ
+}
+
+// JFK TMM is this ok? hard-set some vals (my wanna remove whole function)
+proc geom_nseg() {local nSec, L1, L2, D1, D2, nSeg1, nSeg2, nseg_dend
+  soma area(.5) // make sure diam reflects 3d points
+  nSec = 0
+  forsec "dend" {nseg_dend = nseg}
+  forsec all {
+    nseg = 1+2*nseg_dend //1 + 2*int(L/40)
+    nSec = nSec + 1
+  }
+
+  nSecAll = 3//5
+  nSecSoma = 1
+  nSecApical = 0//2
+  nSecBasal = 2//1
+}
+
+// KFJ
+strdef tstr
+
+proc setnetworkparameters(){
+  rcpWeightFactor = $1 //how stronger reciprocal connections are on average
+  EsynConductance = $2
+  IsynConductance = $3
+  NsynE = $4
+  NsynI = $5
+  weight_AMPA = $6
+  weight_factor_NMDA = $7
+  weight_GABA = $8
+  gNoiseCoeff = $9
+  contactsNumE = $10
+  contactsNumI = $11
+}
+
+proc connect2target() { //$o1 target point process, $o2 returned NetCon
+  soma $o2 = new NetCon(&v(1), $o1)
+  $o2.threshold = -30
+}
+
+proc geom() {
+}
+
+// $s1 section
+func getLongestBranch(){local maxL,d localobj distallist,sref
+    sprint(tstr,"%s distance()",$s1)
+    execute(tstr,this)    
+    
+		maxL = 0
+		d = 0
+		distallist = new SectionList()
+		forsec $s1 {
+			sref = new SectionRef()
+			if (sref.nchild==0) distallist.append()
+		}
+		forsec distallist{
+			d = distance(1)
+			if(maxL<d) maxL = d
+		}
+		// for the soma case
+		if (maxL == 0) {
+      $s1 {
+        maxL = L
+      }
+    }
+		return maxL
+	}
+
+// $s1 section
+// $2 distance x in micrometers
+// return list of [1,2] vectors  - of the appropriate section and the location in each vector
+obfunc locateSites() {local maxL,site,d0,d1,siteX,i localobj vv,ll
+	ll = new List()
+
+  sprint(tstr,"%s distance()",$s1)
+  execute(tstr,this)    
+    
+	maxL = getLongestBranch($s1)
+	site = $2
+	i = 0
+	forsec $s1 {
+    if (distance(0) < distance(1)) {
+  		d0 = distance(0)
+  		d1 = distance(1)
+  	} else {
+  		d1 = distance(0)
+  		d0 = distance(1)
+  	}
+
+    if (site <= d1 && site >= d0) {
+      siteX = (site-d0)/(d1-d0)
+      secNum = i
+      vv = new Vector()
+      ll.append(vv.append(secNum,siteX))
+		}
+		i = i+1
+	}
+  return ll
+}
+
+//========================================================================================
+//================================= microcircuit related stuff============================
+//========================================================================================
+
+// $1 some number that is function of the TTC index
+//
+// Have each TTC with unique sites, but certain portion of inputs identical to root TTC
+proc initRand() {
+  rList = new List() //for stochastic synapses
+
+	rd1 = new Random($1) // unique to this TTC
+	rd1.uniform(0,1)
+}
+
+double siteVec[2] // JFK
+
+
+proc distributeSyn() {local sitenum,syni,preconi,i localobj sl,nilstim
+        strdef treename,cmd2
+	//objref treenameList
+	treenameList = new List()
+
+	treenameList.append(new String("dend[0]"))
+	treenameList.append(new String("dend[1]"))
+	// print "got to before first loop"
+	// print "sIN o1count ", $o1.count()
+	for(i=0;i<$o1.count();i+=1){
+            sprint(cmd2,"access %s",treenameList.o[i].s)
+   	    execute(cmd2,this)
+	    // print "sIN cmd2 1st ", cmd2
+	    sprint(cmd2,"%s sref = new SectionRef()",treenameList.o[i].s)
+	    // print "sIN cmd2 2nd ", cmd2
+	    execute(cmd2,this)
+	    for(iseg=0;iseg<$o1.o[i].size();iseg+=1) {
+	        segx = (0.5+iseg)/$o1.o[i].size()
+		sref {
+			synlist.append(new ProbAMPANMDA2group(segx))
+			syni = synlist.count()-1 //synapse index
+			rList.append(new Random(int(1000000*rd1.repick())))
+			rList.o[syni].negexp(1)
+			synlist.o[syni].setRNG(rList.o[syni])
+			synlist.o[syni].tau_r_AMPA = 0.3
+			synlist.o[syni].tau_d_AMPA = 3
+			synlist.o[syni].tau_r_NMDA = 2
+			synlist.o[syni].tau_d_NMDA = 65
+			synlist.o[syni].e = 0
+			synlist.o[syni].Dep = 800
+			synlist.o[syni].Fac = 0
+			synlist.o[syni].Use = 0.6
+			synlist.o[syni].u0 = 0
+                        synlist.o[syni].gmax = EsynConductance*gNoiseCoeff
+                        synlist.o[syni].weight_factor_NMDA = weight_factor_NMDA
+			//print "syni = ", syni, ", a background E->E synapse, gmax = ", synlist.o[syni].gmax
+
+			Nsyns_thissyn = $o1.o[i].x[iseg]
+			synvarVecList.append(new Vector(3*Nsyns_thissyn))
+			for i1=0,Nsyns_thissyn-1 {
+			  synvarVecList.o[synvarVecList.count()-1].x(i1) = 0
+			  synvarVecList.o[synvarVecList.count()-1].x(Nsyns_thissyn+i1) = 1
+			  synvarVecList.o[synvarVecList.count()-1].x(2*Nsyns_thissyn+i1) = 0
+			  }
+			synlist.o[syni].setVec(synvarVecList.o[synvarVecList.count()-1])
+			preconlist.append(new NetCon(nilstim, synlist.o[syni]))
+			preconi = preconlist.count()-1 //connection index
+			preconlist.o[preconi].weight = weight_AMPA
+			preconlist.o[preconi].delay = 0
+		}
+            }
+	}
+	//print "got to before second loop"
+	//print $o2.count()
+	//print "__"
+	for(i=0;i<$o2.count();i+=1){
+	    //print i
+            sprint(cmd2,"access %s",treenameList.o[i].s)
+   	    execute(cmd2,this)
+	    sprint(cmd2,"%s sref = new SectionRef()",treenameList.o[i].s)
+	    execute(cmd2,this)
+
+	    for(iseg=0;iseg<$o2.o[i].size();iseg+=1) {
+	        segx = (0.5+iseg)/$o2.o[i].size()
+		sref {
+			synlist.append(new ProbUDFsyn2group(segx))
+			syni = synlist.count()-1 //synapse index
+			rList.append(new Random(int(1000000*rd1.repick())))
+			rList.o[syni].negexp(1)
+			synlist.o[syni].setRNG(rList.o[syni])
+			synlist.o[syni].tau_r = 1
+			synlist.o[syni].tau_d = 20
+			synlist.o[syni].e = -80
+			synlist.o[syni].Dep = 800
+			synlist.o[syni].Fac = 0
+			synlist.o[syni].Use = 0.25
+			synlist.o[syni].u0 = 0
+			synlist.o[syni].gmax = IsynConductance*gNoiseCoeff
+			//print "syni = ", syni, ", a background I->E synapse, gmax = ", synlist.o[syni].gmax
+
+			Nsyns_thissyn = $o2.o[i].x[iseg]
+			synvarVecList.append(new Vector(3*Nsyns_thissyn))
+			for i1=0,Nsyns_thissyn-1 {
+			  synvarVecList.o[synvarVecList.count()-1].x(i1) = 0
+			  synvarVecList.o[synvarVecList.count()-1].x(Nsyns_thissyn+i1) = 1
+			  synvarVecList.o[synvarVecList.count()-1].x(2*Nsyns_thissyn+i1) = 0
+			  }
+			synlist.o[syni].setVec(synvarVecList.o[synvarVecList.count()-1])
+			preconlist.append(new NetCon(nilstim, synlist.o[syni]))
+			preconi = preconlist.count()-1 //connection index
+			preconlist.o[preconi].weight = weight_GABA
+			preconlist.o[preconi].delay = 0
+		}
+            }
+	}
+}
+
+// adds the microcircuit connections
+// $o1 conVec - where 0 (no connection), 1 (one way), rcpWeightFactor (reciprocated)
+proc insertMCcons(){local sitenum,syni,ii,jj localobj TconVecE,TconVecI,sl
+	strdef cmd2,treename
+	
+	TconVecE = $o1
+	TconVecI = $o2
+
+	for(ii=0;ii<TconVecE.size();ii+=1){
+		if(TconVecE.x[ii]!=0){
+			for(jj=0;jj<contactsNumE;jj+=1){
+				/*if (rd1.repick()<pA){
+					treename = "apic"
+				} else {
+					treename = "dend"
+				}*/
+				treename = "dend"
+				sl = locateSites(treename,rd1.repick()*getLongestBranch(treename))
+	
+				sitenum = int((sl.count()-1)*rd1.repick())
+				siteVec[0] = sl.o[sitenum].x[0]
+				siteVec[1] = sl.o[sitenum].x[1]
+	
+				sprint(cmd2,"access %s[siteVec[0]]",treename)
+				execute(cmd2,this)
+		
+				sprint(cmd2,"%s[siteVec[0]] sref = new SectionRef()",treename)
+				execute(cmd2,this)
+	
+				sref {
+					synlist.append(new ProbAMPANMDA2(siteVec[1]))
+					syni = synlist.count()-1 //synapse index
+					//print "Added AMPANMDAsyn, syni=", syni
+					rList.append(new Random(int(1000000*rd1.repick())))
+					rList.o[syni].negexp(1)
+					synlist.o[syni].setRNG(rList.o[syni])
+					synlist.o[syni].tau_r_AMPA = 0.3
+					synlist.o[syni].tau_d_AMPA = 3
+					synlist.o[syni].tau_r_NMDA = 2
+					synlist.o[syni].tau_d_NMDA = 65
+					synlist.o[syni].e = 0
+					synlist.o[syni].Dep = 0
+					synlist.o[syni].Fac = 0
+					synlist.o[syni].Use = 0.25
+					synlist.o[syni].u0 = 0
+					synlist.o[syni].gmax = TconVecE.x[ii] * EsynConductance
+			                //print "syni = ", syni, ", a network E->E synapse, gmax = ", synlist.o[syni].gmax
+				}
+			}
+		}
+	}
+
+	for(ii=0;ii<TconVecI.size();ii+=1){
+		if(TconVecI.x[ii]!=0){
+			for(jj=0;jj<contactsNumI;jj+=1){
+				/*if (rd1.repick()<pA){
+					treename = "apic"
+				} else {
+					treename = "dend"
+				}*/
+				treename = "dend"
+				sl = locateSites(treename,rd1.repick()*getLongestBranch(treename))
+	
+				sitenum = int((sl.count()-1)*rd1.repick())
+				siteVec[0] = sl.o[sitenum].x[0]
+				siteVec[1] = sl.o[sitenum].x[1]
+	
+				sprint(cmd2,"access %s[siteVec[0]]",treename)
+				execute(cmd2,this)
+		
+				sprint(cmd2,"%s[siteVec[0]] sref = new SectionRef()",treename)
+				execute(cmd2,this)
+	
+				sref {
+					synlist.append(new ProbUDFsyn2(siteVec[1]))
+					syni = synlist.count()-1 //synapse index
+					//print "Added UDFsyn, syni=", syni
+					rList.append(new Random(int(1000000*rd1.repick())))
+					rList.o[syni].negexp(1)
+					synlist.o[syni].setRNG(rList.o[syni])
+					synlist.o[syni].tau_r = 1
+					synlist.o[syni].tau_d = 20
+					synlist.o[syni].e = -80
+					synlist.o[syni].Dep = 0
+					synlist.o[syni].Fac = 0
+					synlist.o[syni].Use = 0.25
+					synlist.o[syni].u0 = 0
+					synlist.o[syni].gmax = TconVecI.x[ii] * IsynConductance
+			                //print "syni = ", syni, ", a network I->E synapse, gmax = ", synlist.o[syni].gmax
+				}
+			}
+		}
+	}
+}
+
+
+/*
+proc insertMCcons(){local sitenum,syni,ii,jj localobj TconVecE,TconVecI,sl
+	
+	TconVecE = $o1
+	TconVecI = $o2
+
+	for(ii=0;ii<TconVecE.size();ii+=1){
+		if(TconVecE.x[ii]!=0){
+			access soma
+			soma sref = new SectionRef()
+
+			sref {
+				synlist.append(new ProbAMPANMDA2(0.5))
+				syni = synlist.count()-1 //synapse index
+				rList.append(new Random(int(1000000*rd1.repick())))
+				rList.o[syni].negexp(1)
+				synlist.o[syni].setRNG(rList.o[syni])
+				synlist.o[syni].tau_r_AMPA = 0.3
+				synlist.o[syni].tau_d_AMPA = 3
+				synlist.o[syni].tau_r_NMDA = 2
+				synlist.o[syni].tau_d_NMDA = 65
+				synlist.o[syni].e = 0
+				synlist.o[syni].Dep = 0
+				synlist.o[syni].Fac = 0
+				synlist.o[syni].Use = 0.25
+				synlist.o[syni].u0 = 0
+				synlist.o[syni].gmax = TconVecE.x[ii] * EsynConductance
+                                synlist.o[syni].weight_factor_NMDA = weight_factor_NMDA
+			}
+		}
+	}
+
+	for(ii=0;ii<TconVecI.size();ii+=1){
+		if(TconVecI.x[ii]!=0){
+			access soma
+			soma sref = new SectionRef()
+
+			sref {
+				synlist.append(new ProbUDFsyn2(0.5))
+				syni = synlist.count()-1 //synapse index
+				rList.append(new Random(int(1000000*rd1.repick())))
+				rList.o[syni].negexp(1)
+				synlist.o[syni].setRNG(rList.o[syni])
+				synlist.o[syni].tau_r = 1
+        			synlist.o[syni].tau_d = 20
+				synlist.o[syni].e = -80
+				synlist.o[syni].Dep = 0
+				synlist.o[syni].Fac = 0
+				synlist.o[syni].Use = 0.25
+				synlist.o[syni].u0 = 0
+				synlist.o[syni].gmax = TconVecI.x[ii] * IsynConductance
+			}
+		}
+	}
+}
+*/
+//$o1 list of vectors
+proc setpretrains(){local j
+  for(j=0;j<$o1.count();j+=1){
+    preTrainList.append($o1.o[j])
+  }
+}
+
+proc queuePreTrains(){
+	fih = new FInitializeHandler("initPreSynTrain()",this)
+}
+
+// sets presynaptic spike events
+proc initPreSynTrain(){local ti,si
+	for(ti=0;ti<preTrainList.count();ti+=1){
+		for(si=0;si<preTrainList.o[ti].size();si+=1){
+			preconlist.o[ti].event(preTrainList.o[ti].x[si])
+		}
+	}
+}
+
+endtemplate sIN

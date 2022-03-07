@@ -1,0 +1,311 @@
+/*--------------------------------------------------------------
+	TEMPLATE FILE FOR FAST-SPIKING CORTICAL INTERNEURON
+	---------------------------------------------------
+
+	One compartment model and currents derived from:
+
+   Pospischil, M., Toledo-Rodriguez, M., Monier, C., Piwkowska, Z., 
+   Bal, T., Fregnac, Y., Markram, H. and Destexhe, A.
+   Minimal Hodgkin-Huxley type models for different classes of
+   cortical and thalamic neurons.
+   Biological Cybernetics 99: 427-441, 2008.
+
+   - one compartment model
+   - passive
+   - HH: Traub
+
+   Alain Destexhe, CNRS, 2008
+
+   Tuomo Maki-Marttunen: Added functions from Hay's TTC.hoc, 2017
+   // Copied from sIN.hoc 12.7.2017.
+
+--------------------------------------------------------------*/
+
+begintemplate sIN		// create a new template object
+public soma
+
+public synlist, connect2target, APC, distributeSyn, distributeSyn2
+public initRand,insertMCcons
+public preconlist, rList, preTrainList, preTrainIndexList
+public setnetworkparameters,initPreSynTrain,queuePreTrains,setpretrains
+public pA
+
+objref synlist
+objref preconlist, syngroupIndexList, rList, preTrainList, preTrainIndexList
+objref rd1
+objref this
+objref synvarVecList
+objref sref,fih
+
+create soma[1]
+
+proc init() { local v_potassium, v_sodium
+
+  v_potassium = -100			// potassium reversal potential 
+  v_sodium = 50				   // sodium reversal potential 
+
+  soma {
+  Ra = 100		// geometry 
+  nseg = 1
+  diam = 67
+  L = 67		// so that area is about 14000 um2
+  cm = 1
+
+  insert pas		// leak current 
+  e_pas = -70
+  // g_pas = 5e-5
+  g_pas = 0.00015		// Rin = 48Meg
+
+  // conversion with McC units: 
+  // g(S/cm2) = g(nS)*1e-9/29000e-8
+  //     = g(nS) * 3.45e-6
+
+  insert hh2	   // Hodgin-Huxley INa and IK 
+  ek = v_potassium
+  ena = v_sodium
+  vtraub_hh2 = -55	// resting Vm, BJ was -55
+  gnabar_hh2 = 0.05	// McCormick=15 muS, thal was 0.09
+//	     gkbar_hh2 = 0.007		// McCormick=2 muS, thal was 0.01
+//	     gkbar_hh2 = 0.004
+	     gkbar_hh2 = 0.01	// spike duration of interneurons
+
+  synlist = new List()
+  preconlist = new List()
+  preTrainList = new List()
+  preTrainIndexList = new List()
+  synvarVecList = new List()
+
+  pA = 0.5
+  }
+
+}
+
+
+strdef tstr
+
+proc setnetworkparameters(){
+  rcpWeightFactor = $1 //how stronger reciprocal connections are on average
+  EsynConductance = $2
+  IsynConductance = $3
+  NsynE = $4
+  NsynI = $5
+  weight_AMPA = $6
+  weight_factor_NMDA = $7
+  weight_GABA = $8
+  gNoiseCoeff = $9
+}
+
+proc connect2target() { //$o1 target point process, $o2 returned NetCon
+  soma $o2 = new NetCon(&v(1), $o1)
+  $o2.threshold = -30
+}
+
+proc geom() {
+}
+
+//========================================================================================
+//================================= microcircuit related stuff============================
+//========================================================================================
+
+// $1 some number that is function of the TTC index
+//
+// Have each TTC with unique sites, but certain portion of inputs identical to root TTC
+proc initRand() {
+  rList = new List() //for stochastic synapses
+
+  rd1 = new Random($1) // unique to this TTC
+  rd1.uniform(0,1)
+}
+
+//Not needed in single-compartment neurons.
+proc distributeSyn() {local i localobj sl
+    syngroupIndexList = new List()
+    syngroupIndexList.append(new Vector(NsynE))
+    for(i=0;i<NsynE;i+=1){
+        syngroupIndexList.o[0].x[i] = i
+    }
+    syngroupIndexList.append(new Vector(NsynI))
+    for(i=0;i<NsynI;i+=1){
+        syngroupIndexList.o[1].x[i] = NsynE+i
+    }
+}
+
+proc distributeSyn2() {local sitenum,syni,preconi,i,i1, segInd, compInd localobj sl,nilstim
+        strdef cmd2
+
+        access soma
+        soma sref = new SectionRef()
+
+        sref {
+		synlist.append(new ProbAMPANMDA2groupdet(0.5))
+		syni = synlist.count()-1 //synapse index
+		rList.append(new Random(int(1000000*rd1.repick())))
+		rList.o[syni].negexp(1)
+		synlist.o[syni].setRNG(rList.o[syni])
+		synlist.o[syni].tau_r_AMPA = 0.3
+		synlist.o[syni].tau_d_AMPA = 3
+		synlist.o[syni].tau_r_NMDA = 2
+		synlist.o[syni].tau_d_NMDA = 65
+		synlist.o[syni].e = 0
+		synlist.o[syni].Dep = 800
+		synlist.o[syni].Fac = 0
+		synlist.o[syni].Use = 0.6
+		synlist.o[syni].u0 = 0
+                synlist.o[syni].gmax = EsynConductance*gNoiseCoeff
+                synlist.o[syni].weight_factor_NMDA = weight_factor_NMDA
+
+		Nsyns_thissyn = $1
+		synvarVecList.append(new Vector(3*Nsyns_thissyn))
+		for i1=0,Nsyns_thissyn-1 {
+		  synvarVecList.o[synvarVecList.count()-1].x(i1) = 0
+		  synvarVecList.o[synvarVecList.count()-1].x(Nsyns_thissyn+i1) = 1
+		  synvarVecList.o[synvarVecList.count()-1].x(2*Nsyns_thissyn+i1) = 0
+		  }
+		synlist.o[syni].setVec(synvarVecList.o[synvarVecList.count()-1])
+		//print "synlist.o[",syni,"].printVec()"
+		//synlist.o[syni].printVec()
+		preconlist.append(new NetCon(nilstim, synlist.o[syni]))
+		preconi = preconlist.count()-1 //connection index
+		preconlist.o[preconi].weight = weight_AMPA
+		preconlist.o[preconi].delay = 0
+	}
+	sref {
+		synlist.append(new ProbUDFsyn2groupdet(0.5))
+		syni = synlist.count()-1 //synapse index
+		rList.append(new Random(int(1000000*rd1.repick())))
+		rList.o[syni].negexp(1)
+		synlist.o[syni].setRNG(rList.o[syni])
+		synlist.o[syni].tau_r = 1
+		synlist.o[syni].tau_d = 20
+		synlist.o[syni].e = -80
+		synlist.o[syni].Dep = 800
+		synlist.o[syni].Fac = 0
+		synlist.o[syni].Use = 0.25
+		synlist.o[syni].u0 = 0
+		synlist.o[syni].gmax = IsynConductance*gNoiseCoeff
+
+		Nsyns_thissyn = $2
+		synvarVecList.append(new Vector(3*Nsyns_thissyn))
+		for i1=0,Nsyns_thissyn-1 {
+		  synvarVecList.o[synvarVecList.count()-1].x(i1) = 0
+		  synvarVecList.o[synvarVecList.count()-1].x(Nsyns_thissyn+i1) = 1
+		  synvarVecList.o[synvarVecList.count()-1].x(2*Nsyns_thissyn+i1) = 0
+		  }	
+		synlist.o[syni].setVec(synvarVecList.o[synvarVecList.count()-1])
+		//print "synlist.o[",syni,"].printVec()"
+		//synlist.o[syni].printVec()
+        	preconlist.append(new NetCon(nilstim, synlist.o[syni]))
+		preconi = preconlist.count()-1 //connection index
+		preconlist.o[preconi].weight = weight_GABA
+		preconlist.o[preconi].delay = 0
+	}
+	
+}
+
+// adds the microcircuit connections
+// $o1 conVec - where 0 (no connection), 1 (one way), rcpWeightFactor (reciprocated)
+proc insertMCcons(){local sitenum,syni,ii,jj localobj TconVecE,TconVecI,sl
+	
+	TconVecE = $o1
+	TconVecI = $o2
+
+	for(ii=0;ii<TconVecE.size();ii+=1){
+		if(TconVecE.x[ii]!=0){
+			access soma
+			soma sref = new SectionRef()
+
+			sref {
+				synlist.append(new ProbAMPANMDA2(0.5))
+				syni = synlist.count()-1 //synapse index
+				rList.append(new Random(int(1000000*rd1.repick())))
+				rList.o[syni].negexp(1)
+				synlist.o[syni].setRNG(rList.o[syni])
+				synlist.o[syni].tau_r_AMPA = 0.3
+				synlist.o[syni].tau_d_AMPA = 3
+				synlist.o[syni].tau_r_NMDA = 2
+				synlist.o[syni].tau_d_NMDA = 65
+				synlist.o[syni].e = 0
+				synlist.o[syni].Dep = 0
+				synlist.o[syni].Fac = 0
+				synlist.o[syni].Use = 0.25
+				synlist.o[syni].u0 = 0
+				synlist.o[syni].gmax = TconVecE.x[ii] * EsynConductance
+			}
+		}
+	}
+
+	for(ii=0;ii<TconVecI.size();ii+=1){
+		if(TconVecI.x[ii]!=0){
+			access soma
+			soma sref = new SectionRef()
+
+			sref {
+				synlist.append(new ProbUDFsyn2(0.5))
+				syni = synlist.count()-1 //synapse index
+				rList.append(new Random(int(1000000*rd1.repick())))
+				rList.o[syni].negexp(1)
+				synlist.o[syni].setRNG(rList.o[syni])
+				synlist.o[syni].tau_r = 1
+        			synlist.o[syni].tau_d = 20
+				synlist.o[syni].e = -80
+				synlist.o[syni].Dep = 0
+				synlist.o[syni].Fac = 0
+				synlist.o[syni].Use = 0.25
+				synlist.o[syni].u0 = 0
+				synlist.o[syni].gmax = TconVecI.x[ii] * IsynConductance
+			}
+		}
+	}
+}
+
+//$o1 list of event time vectors
+proc setpretrains(){local i,j,k,indsum localobj preTrainThis,preTrainIndicesThis,sortedIndicesThis
+  for (i=0;i<syngroupIndexList.count();i+=1) {
+    preTrainThis = new Vector()
+    preTrainIndicesThis = new Vector()
+    for (j=0;j<syngroupIndexList.o[i].size();j+=1) {
+      k = syngroupIndexList.o[i].x[j]
+      preTrainThis.append($o1.o[k])
+      preTrainIndicesThis.append(new Vector($o1.o[k].size(),j))
+    }
+    //for (k=0;k<NsynE+NsynI;k+=1) {
+    //  preTrainThis.append($o1.o[k])
+    //  preTrainIndicesThis.append(new Vector($o1.o[k].size(),k))
+    //}
+    sortedIndicesThis = new Vector()
+    sortedIndicesThis = preTrainThis.sortindex()
+    preTrainList.append(preTrainThis.index(sortedIndicesThis))
+    preTrainIndexList.append(preTrainIndicesThis.index(sortedIndicesThis))
+    sortedIndicesThis.resize(0)
+  }
+  //for (i=0;i<preTrainList.count();i+=1) {  
+  //  print "printing values for i = ", i, " of ", preTrainList.count()
+  //  preTrainList.o[i].printf
+  //  preTrainIndexList.o[i].printf
+  //}
+}
+
+////$o1 list of vectors
+//proc setpretrains(){local j
+//  for(j=0;j<$o1.count();j+=1){
+//    preTrainList.append($o1.o[j])
+//  }
+//}
+
+proc queuePreTrains(){
+	fih = new FInitializeHandler("initPreSynTrain()",this)
+}
+
+proc initPreSynTrain(){local syni,ti
+        for(syni=0;syni<preTrainList.count();syni+=1){
+                for(ti=0;ti<preTrainList.o[syni].size();ti+=1){
+                        preconlist.o[syni].event(preTrainList.o[syni].x[ti])
+                }
+                synlist.o[syni].setVec2(preTrainIndexList.o[syni])
+                //synlist.o[syni].printVec2()
+                preTrainList.o[syni].resize(0)
+        }
+        preTrainList.remove_all()
+}
+
+endtemplate sIN

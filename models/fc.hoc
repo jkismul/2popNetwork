@@ -1,0 +1,154 @@
+// Modified model by JFK.
+//
+//       | dend[1]
+//  soma O- axon
+//       | dend[0]
+//
+// Values not updated!
+
+
+begintemplate fc
+
+public soma, dend, apic, axon
+public init
+
+create soma[1], dend[2], axon[2]
+
+proc init() {
+
+ connect dend[0](0), soma(0)
+ connect dend[1](0), soma(1)
+
+ soma[0] connect axon[0](0), 1                                           
+ axon[0] connect axon[1](0), 1
+
+ soma insert pas
+ dend insert pas
+ dend[1] insert pas
+ axon insert pas
+ axon[1] insert pas
+
+ soma {nseg = 1 Ra = 100 diam = 7.19591 L = 31.5639 cm = 1 V = -80 e_pas = -75.300257 }
+ dend[0] {nseg = 19 Ra = 100 diam = 10.28 L = 282.13 cm = 1 V = -80 e_pas = -75.300257 }
+ dend[1] {nseg = 19 Ra = 100 diam = 10.28 L = 282.13 cm = 1 V = -80 e_pas = -75.300257 }
+ axon[0] {nseg = 1 Ra = 100 diam = 0.65 L = 30 cm = 1 V = -80 e_pas = -75.300257 }
+ axon[1] {nseg = 1 Ra = 100 diam = 0.558814 L = 30 cm = 1 V = -80 e_pas = -75.300257 }
+
+soma(0.5) distance()
+
+ soma {
+    insert NaTs2_t
+    insert SKv3_1
+    insert Ca
+    insert SK_E2
+    insert Ca_LVAst
+    insert Nap_Et2
+    insert Im
+    insert K_Pst
+    insert K_Tst
+    insert CaDynamics_E2
+    ena = 50
+    ek = -85
+    
+
+    gK_Tstbar_K_Tst=0.008343
+    gamma_CaDynamics_E2=0.000893
+    gNap_Et2bar_Nap_Et2=0.000001
+    gCa_LVAstbar_Ca_LVAst=0.005574
+    gSK_E2bar_SK_E2=0.026900
+    gK_Pstbar_K_Pst=0.502333
+    gSKv3_1bar_SKv3_1=0.653374
+    decay_CaDynamics_E2=605.033222
+    e_pas=-76.498119
+    g_pas=0.000057
+    gImbar_Im=0.000784
+    gNaTs2_tbar_NaTs2_t=0.300054
+    gCabar_Ca=0.000792
+ }
+ forsec "dend" {
+    insert NaTs2_t
+    insert SKv3_1
+    insert Nap_Et2
+    insert Ih
+    insert Im
+    insert K_Pst
+    insert K_Tst
+
+
+    gSKv3_1bar_SKv3_1=0.005450
+    gNap_Et2bar_Nap_Et2=0.000001
+    gNaTs2_tbar_NaTs2_t=0.004119
+    e_pas=-60.065872
+    g_pas=0.000006
+    
+    for (x,0) {
+        gIhbar_Ih = (-0.869600 + 2.087000*exp((x*L-0.000000)*0.003000))*0.000051
+        //print x*L, gIhbar_Ih, L, " xmode"
+        //X = distance(x)
+        //gIhbar_Ih = (-0.869600 + 2.087000*exp((X-0.000000)*0.003000))*0.000051
+        //print X, gIhbar_Ih, L, " distmode" 
+        // distmode gives unsymmetrical distance for above/below. x-mode gives correct result for this specific morphology.
+        gImbar_Im = (-0.869600 + 2.087000*exp((x*L--1000.)*-0.003000))*0.000371
+        //print x*L, gImbar_Im, L
+    }
+
+
+
+ }
+ /*apic {
+    insert NaTs2_t
+    insert SKv3_1
+    insert Nap_Et2
+    insert Ih
+    insert Im
+    insert K_Pst
+    insert K_Tst
+
+
+    gSKv3_1bar_SKv3_1=0.005450
+    gNap_Et2bar_Nap_Et2=0.000001
+    gNaTs2_tbar_NaTs2_t=0.004119
+    e_pas=-60.065872
+    g_pas=0.000006
+
+    for (x,0) {
+        gIhbar_Ih = (-0.869600 + 2.087000*exp((x*L-0.000000)*0.003000))*0.000051
+        //print x*L, gIhbar_Ih, L
+        gImbar_Im = (-0.869600 + 2.087000*exp((x*L--1000.)*-0.003000))*0.000371
+        //print x*L, gImbar_Im, L
+    }
+ }*/
+
+ forsec "axon" {
+    insert SKv3_1
+    insert Ca
+    insert SK_E2
+    insert CaDynamics_E2
+    insert Nap_Et2
+    insert Im
+    insert K_Pst
+    insert K_Tst
+    insert Ca_LVAst
+    insert NaTa_t
+    ena = 50
+    ek = -85
+
+    gNaTa_tbar_NaTa_t=3.418459
+    gK_Tstbar_K_Tst=0.026009
+    gamma_CaDynamics_E2=0.003923
+    gNap_Et2bar_Nap_Et2=0.000001
+    gCa_LVAstbar_Ca_LVAst=0.002256
+    gSK_E2bar_SK_E2=0.000009
+    gK_Pstbar_K_Pst=0.025854
+    gSKv3_1bar_SKv3_1=0.196957
+    decay_CaDynamics_E2=20.715642
+    e_pas=-60.250899
+    g_pas=0.000002
+    gImbar_Im=0.000599
+    gCabar_Ca=0.000138
+ }
+
+
+}
+
+endtemplate fc
